@@ -23,7 +23,7 @@
   "database": {
     "shapes": 2500,
     "separated": 0,
-    "seconds": 18.503942899988033,
+    "seconds": 16.413569599972107,
     "n_jobs": 2
   },
   "naca2412_exact_at_design_cl": {
@@ -34,7 +34,7 @@
   },
   "surrogates": {
     "ridge": {
-      "train_seconds": 0.025147999986074865,
+      "train_seconds": 0.02168759994674474,
       "val": {
         "cd": {
           "r2": 0.7921734116431509,
@@ -69,7 +69,7 @@
       }
     },
     "rf": {
-      "train_seconds": 2.617352099972777,
+      "train_seconds": 2.501689500059001,
       "val": {
         "cd": {
           "r2": 0.7035076352467884,
@@ -83,7 +83,7 @@
         },
         "cm": {
           "r2": 0.8155555167694422,
-          "mae": 0.003771850281817195
+          "mae": 0.0037718502818171952
         }
       },
       "test": {
@@ -104,7 +104,7 @@
       }
     },
     "xgboost": {
-      "train_seconds": 2.169694699929096,
+      "train_seconds": 1.928955299896188,
       "val": {
         "cd": {
           "r2": 0.891122765517048,
@@ -139,7 +139,7 @@
       }
     },
     "nn": {
-      "train_seconds": 46.44968270009849,
+      "train_seconds": 36.60083480004687,
       "val": {
         "cd": {
           "r2": 0.9774283805600257,
@@ -174,7 +174,7 @@
       }
     },
     "ensemble": {
-      "train_seconds": 51.236729500000365,
+      "train_seconds": 41.03147960000206,
       "val": {
         "cd": {
           "r2": 0.9150404299107762,
@@ -193,7 +193,7 @@
       },
       "test": {
         "cd": {
-          "r2": 0.9182904285763182,
+          "r2": 0.918290428576318,
           "mae": 0.00011062213590555237,
           "mean_abs_pct": 1.6813290040021376,
           "p95_abs_pct": 4.814579152262301
@@ -211,19 +211,19 @@
   },
   "chosen_surrogate": "nn",
   "timing": {
-    "solver_ms_per_shape": 7.768769001122564,
-    "surrogate_ms_per_shape_single_call": 0.5562165001174435,
-    "surrogate_ms_per_shape_in_batch_of_60": 0.011889666687541952,
-    "speedup_single_call": 13.967167459940889,
-    "speedup_batched": 653.4051126313504
+    "solver_ms_per_shape": 7.568375999107957,
+    "surrogate_ms_per_shape_single_call": 0.48830749990884215,
+    "surrogate_ms_per_shape_in_batch_of_60": 0.009455583349335939,
+    "speedup_single_call": 15.499200812031006,
+    "speedup_batched": 800.4134403446913
   },
   "optimisation": {
-    "surrogate_ga_seconds": 0.5720752999186516,
+    "surrogate_ga_seconds": 0.5272798000369221,
     "surrogate_ga_calls": 5460,
     "solver_checks": 20,
-    "solver_check_seconds": 0.17866660002619028,
-    "surrogate_route_total_seconds": 70.51656229991931,
-    "direct_ga_seconds": 34.68234060006216,
+    "solver_check_seconds": 0.15939539996907115,
+    "surrogate_route_total_seconds": 58.1534119999269,
+    "direct_ga_seconds": 31.28107769996859,
     "direct_ga_solver_calls": 5460
   },
   "shapes": [

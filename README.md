@@ -29,9 +29,9 @@ Each row of data is one shape, so the 70/15/15 split is a split by shape and no 
 | Model | cd mean abs. error | cd R² | alpha error (deg) | cm error | Training time |
 |---|---|---|---|---|---|
 | Ridge regression (linear baseline) | 2.73% | 0.791 | 0.0020 | 0.00007 | under 0.1 s |
-| Random forest | 3.45% | 0.700 | 0.126 | 0.0041 | 2.6 s |
-| XGBoost | 1.91% | 0.882 | 0.047 | 0.0014 | 2.2 s |
-| **Neural net (12-64-64-3 MLP), chosen** | **0.45%** | **0.986** | **0.0026** | **0.00008** | 46 s |
+| Random forest | 3.45% | 0.700 | 0.126 | 0.0041 | 2.5 s |
+| XGBoost | 1.91% | 0.882 | 0.047 | 0.0014 | 1.9 s |
+| **Neural net (12-64-64-3 MLP), chosen** | **0.45%** | **0.986** | **0.0026** | **0.00008** | 37 s |
 | Ensemble of RF, XGBoost and MLP | 1.68% | 0.918 | 0.055 | 0.0017 | (sum of the three) |
 
 The targets are smooth functions of the weights, so the tree models do worse than a straight linear fit on alpha and cm, and averaging them into an ensemble makes the MLP worse, not better.
@@ -44,13 +44,13 @@ The average error hides a larger miss at the optimum. For the shape the surrogat
 
 | Step | Time |
 |---|---|
-| Solver, one shape (one core) | 7.8 ms |
-| MLP surrogate, one shape per call | 0.56 ms (14 times faster) |
-| MLP surrogate, per shape in a batch of 60 | 0.012 ms (653 times faster) |
-| Surrogate route end to end: score 2,500 shapes (18 s on 2 cores), train all four models (51 s), run the GA (5,460 calls, 0.6 s), re-score 20 picks (0.2 s) | 71 s |
-| GA with the solver in the loop (5,460 calls, 2 cores) | 35 s |
+| Solver, one shape (one core) | 7.6 ms |
+| MLP surrogate, one shape per call | 0.49 ms (15 times faster) |
+| MLP surrogate, per shape in a batch of 60 | 0.0095 ms (800 times faster) |
+| Surrogate route end to end: score 2,500 shapes (16 s on 2 cores), train all four models (41 s), run the GA (5,460 calls, 0.5 s), re-score 20 picks (0.2 s) | 58 s |
+| GA with the solver in the loop (5,460 calls, 2 cores) | 31 s |
 
-The surrogate is fast per call, but with a solver this cheap the direct GA finished sooner and found a slightly better shape. A surrogate pays off when each solver call takes seconds or more (for example RANS CFD), or when one trained surrogate serves many design studies.
+Timings come from one run on a shared machine limited to 2 worker processes; across three runs they varied by up to about 20%. The surrogate is fast per call, but with a solver this cheap the direct GA finished sooner and found a slightly better shape. A surrogate pays off when each solver call takes seconds or more (for example RANS CFD), or when one trained surrogate serves many design studies.
 
 ## Validation
 
@@ -100,7 +100,7 @@ pip install -r requirements.txt
 
 pytest                             # 10 quick checks of the maths, a few seconds
 python validate.py                 # downloads the NACA 0012 data, writes docs/validation.*
-python main_pipeline.py            # about 2 minutes on 2 cores; add --quick for a smoke test
+python main_pipeline.py            # about 2 minutes on 2 cores; --quick runs a 1-minute smoke test into data/quick/
 streamlit run visualization/dashboard.py
 ```
 

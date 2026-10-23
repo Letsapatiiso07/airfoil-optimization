@@ -121,12 +121,17 @@ def main():
     ap.add_argument('--population', type=int, default=60)
     ap.add_argument('--generations', type=int, default=100)
     ap.add_argument('--seed', type=int, default=0)
-    ap.add_argument('--quick', action='store_true', help='300 shapes, 20 generations')
+    ap.add_argument('--quick', action='store_true',
+                    help='300 shapes, 20 generations, outputs to data/quick/')
     args = ap.parse_args()
+    out, store, model_path = DOCS, DATA, MODELS / 'surrogate_model.pkl'
     if args.quick:
+        # keep the committed results in docs/ untouched
         args.samples, args.generations = 300, 20
-    for d in (DOCS, DATA, MODELS):
-        d.mkdir(exist_ok=True)
+        out = store = DATA / 'quick'
+        model_path = store / 'surrogate_model.pkl'
+    for d in (out, store):
+        d.mkdir(parents=True, exist_ok=True)
 
     flight = FlightConditions(altitude=1000, velocity=60, chord=1.0)
     problem = DesignProblem(cl_design=0.5, reynolds=float(round(flight.reynolds, -4)))
@@ -141,7 +146,7 @@ def main():
     print(f"\n[1] Scoring {args.samples} sampled shapes with the solver ...")
     W = problem.sample(args.samples, seed=args.seed)
     R, t_db = timed(problem.evaluate_many, W, N_JOBS)
-    np.savez_compressed(DATA / 'database.npz', weights=W, **R)
+    np.savez_compressed(store / 'database.npz', weights=W, **R)
     attached = ~R['separated']
     X, y = W[attached], np.column_stack([R[k] for k in TARGETS])[attached]
     print(f"    {len(W)} shapes in {t_db:.1f} s; {int((~attached).sum())} separated "
@@ -152,7 +157,7 @@ def main():
     tr, va, te = split(len(X), args.seed)
     fitted, sur_report, best = train_surrogates(X, y, tr, va, te, args.seed)
     model = fitted[best]
-    model.save(str(MODELS / 'surrogate_model.pkl'))
+    model.save(str(model_path))
     print(f"    {'model':10s} {'train s':>8s} {'val cd err%':>12s} {'test cd err%':>13s} "
           f"{'test cd R2':>11s} {'test alpha MAE':>15s} {'test cm MAE':>12s}")
     for k, r in sur_report.items():
@@ -233,8 +238,8 @@ def main():
         },
         'shapes': rows,
     }
-    (DOCS / 'results.json').write_text(json.dumps(summary, indent=2))
-    with open(DOCS / 'optimised_airfoil.dat', 'w') as f:
+    (out / 'results.json').write_text(json.dumps(summary, indent=2))
+    with open(out / 'optimised_airfoil.dat', 'w') as f:
         f.write('Optimised airfoil (surrogate GA), Selig order\n')
         for xi, yi in zip(*problem.airfoil(w_sur).coordinates(N_POINTS)):
             f.write(f"{xi:10.6f} {yi:10.6f}\n")
@@ -254,10 +259,10 @@ def main():
     print(f"    wall time: surrogate route {end_to_end:.0f} s (database + training + GA + checks), "
           f"direct GA {t_ga_d:.0f} s")
 
-    plot(problem, model, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d)
+    plot(out, problem, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d)
 
 
-def plot(problem, model, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d):
+def plot(out, problem, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d):
     style.apply()
     import matplotlib.pyplot as plt
 
@@ -297,7 +302,7 @@ def plot(problem, model, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d):
                  title='GA progress')
     ax[1, 1].legend(loc='lower right', fontsize=8)
     fig.tight_layout()
-    fig.savefig(DOCS / 'optimisation.png', dpi=130)
+    fig.savefig(out / 'optimisation.png', dpi=130)
     plt.close(fig)
 
     nice = {'ridge': 'Ridge (linear baseline)', 'rf': 'Random forest', 'xgboost': 'XGBoost',
@@ -323,10 +328,10 @@ def plot(problem, model, X, y, te, fitted, sur_report, best, rows, ga_s, ga_d):
     ax[1].grid(axis='y', visible=False)
     ax[1].set_xlim(0, max(errs) * 1.25)
     fig.tight_layout()
-    fig.savefig(DOCS / 'surrogate.png', dpi=130)
+    fig.savefig(out / 'surrogate.png', dpi=130)
     plt.close(fig)
     print(f"\nSaved results.json, optimised_airfoil.dat, optimisation.png and surrogate.png "
-          f"in {DOCS}")
+          f"in {out}")
 
 
 if __name__ == '__main__':
