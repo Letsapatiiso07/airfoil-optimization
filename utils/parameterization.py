@@ -1,295 +1,164 @@
+"""
+Airfoil geometry: NACA 4-digit sections and the CST (Kulfan) parameterisation.
+
+Coordinates follow the Selig order used by XFOIL and the UIUC database:
+upper trailing edge -> leading edge -> lower trailing edge, chord = 1.
+"""
+
+from math import comb
+from typing import Tuple
+
 import numpy as np
-from typing import Tuple, List
-import matplotlib.pyplot as plt
 
 
-class PARSECAirfoil:
-    """
-    PARSEC airfoil parameterization method
-    11 parameters define the airfoil geometry:
-    - rle: leading edge radius
-    - x_up, y_up: upper crest location
-    - y_xxup: upper crest curvature
-    - x_lo, y_lo: lower crest location
-    - y_xxlo: lower crest curvature
-    - yte: trailing edge thickness
-    - alpha_te: trailing edge direction
-    - beta_te: trailing edge wedge angle
-    - dz_te: trailing edge offset
-    """
-    
-    def __init__(self, params: np.ndarray):
-        """
-        Initialize PARSEC airfoil with 11 parameters
-        
-        Args:
-            params: Array of 11 PARSEC parameters
-        """
-        self.params = params
-        self.rle = params[0]
-        self.x_up = params[1]
-        self.y_up = params[2]
-        self.y_xxup = params[3]
-        self.x_lo = params[4]
-        self.y_lo = params[5]
-        self.y_xxlo = params[6]
-        self.yte = params[7]
-        self.alpha_te = params[8]
-        self.beta_te = params[9]
-        self.dz_te = params[10]
-        
-    def generate_coordinates(self, n_points: int = 100) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Generate airfoil coordinates from PARSEC parameters
-        
-        Args:
-            n_points: Number of points on each surface
-            
-        Returns:
-            x, y coordinates of airfoil
-        """
-        # Generate x coordinates (cosine spacing for better resolution at LE/TE)
-        beta = np.linspace(0, np.pi, n_points)
-        x = 0.5 * (1 - np.cos(beta))
-        
-        # Calculate upper and lower surface
-        y_upper = self._calculate_surface(x, 'upper')
-        y_lower = self._calculate_surface(x, 'lower')
-        
-        # Combine upper and lower surfaces
-        x_full = np.concatenate([x[::-1], x[1:]])
-        y_full = np.concatenate([y_upper[::-1], y_lower[1:]])
-        
-        return x_full, y_full
-    
-    def _calculate_surface(self, x: np.ndarray, surface: str) -> np.ndarray:
-        """
-        Calculate y coordinates for upper or lower surface
-        
-        Args:
-            x: x coordinates
-            surface: 'upper' or 'lower'
-            
-        Returns:
-            y coordinates
-        """
-        if surface == 'upper':
-            x_crest = self.x_up
-            y_crest = self.y_up
-            y_xx = self.y_xxup
-        else:
-            x_crest = self.x_lo
-            y_crest = self.y_lo
-            y_xx = self.y_xxlo
-        
-        # Calculate coefficients for 6th order polynomial
-        C = np.zeros(7)
-        
-        # Leading edge radius constraint
-        C[0] = np.sqrt(2 * self.rle)
-        
-        # Build constraint matrix
-        A = np.array([
-            [x_crest**1.5, x_crest**2.5, x_crest**3.5, x_crest**4.5, x_crest**5.5],
-            [1.5*np.sqrt(x_crest), 2.5*x_crest**1.5, 3.5*x_crest**2.5, 4.5*x_crest**3.5, 5.5*x_crest**4.5],
-            [0.75/np.sqrt(x_crest), 3.75*np.sqrt(x_crest), 8.75*x_crest**1.5, 15.75*x_crest**2.5, 24.75*x_crest**3.5],
-            [1.0**1.5, 1.0**2.5, 1.0**3.5, 1.0**4.5, 1.0**5.5],
-            [1.5, 2.5, 3.5, 4.5, 5.5]
-        ])
-        
-        # Constraint vector
-        sign = 1 if surface == 'upper' else -1
-        b = np.array([
-            y_crest - C[0]*np.sqrt(x_crest),
-            0,  # Zero slope at crest
-            y_xx,
-            sign * self.yte/2 + sign * self.dz_te - C[0],
-            np.tan(self.alpha_te - sign * self.beta_te/2)
-        ])
-        
-        # Solve for remaining coefficients
-        try:
-            C[1:6] = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
-            C[1:6] = np.zeros(5)
-        
-        # Calculate y coordinates
-        y = (C[0]*np.sqrt(x) + C[1]*x**1.5 + C[2]*x**2.5 + 
-             C[3]*x**3.5 + C[4]*x**4.5 + C[5]*x**5.5)
-        
-        if surface == 'lower':
-            y = -y
-            
-        return y
-    
-    def save_dat_file(self, filename: str, n_points: int = 150):
-        """
-        Save airfoil coordinates to .dat file (XFoil format)
-        
-        Args:
-            filename: Output filename
-            n_points: Number of points per surface
-        """
-        x, y = self.generate_coordinates(n_points)
-        
-        with open(filename, 'w') as f:
-            f.write(f"PARSEC Airfoil\n")
-            for xi, yi in zip(x, y):
-                f.write(f"{xi:10.6f}  {yi:10.6f}\n")
-    
-    def plot(self, ax=None, **kwargs):
-        """
-        Plot the airfoil shape
-        
-        Args:
-            ax: Matplotlib axis
-            **kwargs: Additional plot arguments
-        """
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(10, 4))
-        
-        x, y = self.generate_coordinates()
-        ax.plot(x, y, **kwargs)
-        ax.set_aspect('equal')
-        ax.grid(True, alpha=0.3)
-        ax.set_xlabel('x/c')
-        ax.set_ylabel('y/c')
-        ax.set_title('Airfoil Geometry')
-        
-        return ax
+def cosine_spacing(n_points: int) -> np.ndarray:
+    """x/c from 0 to 1, clustered at the leading and trailing edges."""
+    beta = np.linspace(0.0, np.pi, n_points)
+    return 0.5 * (1.0 - np.cos(beta))
 
 
-class CST_Airfoil:
+def to_selig(xu, yu, xl, yl) -> Tuple[np.ndarray, np.ndarray]:
+    """Join upper and lower surfaces (both ordered LE -> TE) into one loop."""
+    x = np.concatenate([xu[::-1], xl[1:]])
+    y = np.concatenate([yu[::-1], yl[1:]])
+    return x, y
+
+
+def naca4_camber(x: np.ndarray, m: float, p: float) -> Tuple[np.ndarray, np.ndarray]:
+    """NACA 4-digit mean line yc(x) and its slope dyc/dx."""
+    yc = np.zeros_like(x)
+    dyc = np.zeros_like(x)
+    if m > 0 and p > 0:
+        fwd = x < p
+        yc[fwd] = m / p**2 * (2 * p * x[fwd] - x[fwd]**2)
+        dyc[fwd] = 2 * m / p**2 * (p - x[fwd])
+        aft = ~fwd
+        yc[aft] = m / (1 - p)**2 * ((1 - 2 * p) + 2 * p * x[aft] - x[aft]**2)
+        dyc[aft] = 2 * m / (1 - p)**2 * (p - x[aft])
+    return yc, dyc
+
+
+def thin_airfoil_alpha_l0(m: float, p: float) -> float:
+    """Zero-lift angle (deg) of a NACA 4-digit mean line by thin-airfoil theory:
+    alpha_L0 = -(1/pi) * integral_0^pi dyc/dx (cos t - 1) dt, x = (1 - cos t) / 2."""
+    if m == 0 or p == 0:
+        return 0.0
+    t = np.linspace(0.0, np.pi, 20001)
+    _, dyc = naca4_camber(0.5 * (1 - np.cos(t)), m, p)
+    return float(-np.degrees(np.trapezoid(dyc * (np.cos(t) - 1), t) / np.pi))
+
+
+def naca4_surfaces(code: str, n_points: int = 81, closed_te: bool = True):
+    """Upper and lower surfaces of a NACA 4-digit section, each LE -> TE.
+
+    Uses the standard definition (Abbott and von Doenhoff, 1959). The standard
+    x^4 coefficient (-0.1015) leaves a 0.25% chord gap at the trailing edge;
+    closed_te (the default) uses -0.1036, which closes it.
     """
-    Class-Shape Transformation (CST) parameterization
-    Alternative to PARSEC with different mathematical basis
+    m = int(code[0]) / 100.0
+    p = int(code[1]) / 10.0
+    t = int(code[2:]) / 100.0
+    x = cosine_spacing(n_points)
+    a4 = -0.1036 if closed_te else -0.1015
+    yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2
+                  + 0.2843 * x**3 + a4 * x**4)
+    yc, dyc = naca4_camber(x, m, p)
+    theta = np.arctan(dyc)
+    xu, yu = x - yt * np.sin(theta), yc + yt * np.cos(theta)
+    xl, yl = x + yt * np.sin(theta), yc - yt * np.cos(theta)
+    return xu, yu, xl, yl
+
+
+def naca4(code: str, n_points: int = 81, closed_te: bool = True):
+    """NACA 4-digit coordinates in Selig order."""
+    return to_selig(*naca4_surfaces(code, n_points, closed_te))
+
+
+class CSTAirfoil:
     """
-    
-    def __init__(self, au: np.ndarray, al: np.ndarray, n1: float = 0.5, n2: float = 1.0, dte: float = 0.0):
-        """
-        Initialize CST airfoil
-        
-        Args:
-            au: Upper surface coefficients
-            al: Lower surface coefficients
-            n1: Class function parameter (leading edge)
-            n2: Class function parameter (trailing edge)
-            dte: Trailing edge thickness
-        """
-        self.au = au
-        self.al = al
+    Class-Shape Transformation (Kulfan, 2008).
+
+    y(x) = C(x) * S(x) +/- x * dte / 2, with class function
+    C(x) = x^n1 (1 - x)^n2 and S(x) a Bernstein polynomial whose weights are
+    the design variables. n1 = 0.5, n2 = 1 gives a round nose and sharp tail.
+    Upper weights are usually positive, lower weights negative.
+    """
+
+    def __init__(self, au, al, dte: float = 0.0, n1: float = 0.5, n2: float = 1.0):
+        self.au = np.asarray(au, dtype=float)
+        self.al = np.asarray(al, dtype=float)
+        self.dte = dte
         self.n1 = n1
         self.n2 = n2
-        self.dte = dte
-        
-    def _class_function(self, x: np.ndarray) -> np.ndarray:
-        """Class function C(x) = x^n1 * (1-x)^n2"""
-        return x**self.n1 * (1 - x)**self.n2
-    
-    def _shape_function(self, x: np.ndarray, a: np.ndarray) -> np.ndarray:
-        """Bernstein polynomial shape function"""
-        n = len(a) - 1
-        S = np.zeros_like(x)
-        for i, ai in enumerate(a):
-            K = np.math.comb(n, i)
-            S += ai * K * x**i * (1 - x)**(n - i)
-        return S
-    
-    def generate_coordinates(self, n_points: int = 100) -> Tuple[np.ndarray, np.ndarray]:
-        """Generate airfoil coordinates"""
-        beta = np.linspace(0, np.pi, n_points)
-        x = 0.5 * (1 - np.cos(beta))
-        
-        C = self._class_function(x)
-        Su = self._shape_function(x, self.au)
-        Sl = self._shape_function(x, self.al)
-        
-        y_upper = C * Su + x * self.dte
-        y_lower = -(C * Sl - x * self.dte)
-        
-        x_full = np.concatenate([x[::-1], x[1:]])
-        y_full = np.concatenate([y_upper[::-1], y_lower[1:]])
-        
-        return x_full, y_full
+
+    @property
+    def weights(self) -> np.ndarray:
+        return np.concatenate([self.au, self.al])
+
+    @classmethod
+    def from_weights(cls, w, dte: float = 0.0) -> "CSTAirfoil":
+        w = np.asarray(w, dtype=float)
+        half = len(w) // 2
+        return cls(w[:half], w[half:], dte)
+
+    def _basis(self, x: np.ndarray, n_weights: int) -> np.ndarray:
+        """Class function times Bernstein basis, shape (len(x), n_weights)."""
+        n = n_weights - 1
+        c = x**self.n1 * (1 - x)**self.n2
+        b = np.stack([comb(n, i) * x**i * (1 - x)**(n - i) for i in range(n + 1)], axis=1)
+        return c[:, None] * b
+
+    def surfaces(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        yu = self._basis(x, len(self.au)) @ self.au + x * self.dte / 2
+        yl = self._basis(x, len(self.al)) @ self.al - x * self.dte / 2
+        return yu, yl
+
+    def coordinates(self, n_points: int = 81) -> Tuple[np.ndarray, np.ndarray]:
+        x = cosine_spacing(n_points)
+        yu, yl = self.surfaces(x)
+        return to_selig(x, yu, x, yl)
 
 
-def generate_random_parsec_params(n_samples: int = 1) -> np.ndarray:
+def fit_cst(xu, yu, xl, yl, order: int = 5) -> CSTAirfoil:
+    """Least-squares CST fit to given surfaces. dte is taken from the data."""
+    dte = float(yu[-1] - yl[-1])
+    probe = CSTAirfoil(np.zeros(order + 1), np.zeros(order + 1), dte)
+    # a cambered NACA nose can put a point or two just ahead of x = 0
+    mu, ml = (xu > 0) & (xu <= 1), (xl > 0) & (xl <= 1)
+    au, *_ = np.linalg.lstsq(probe._basis(xu[mu], order + 1),
+                             yu[mu] - xu[mu] * dte / 2, rcond=None)
+    al, *_ = np.linalg.lstsq(probe._basis(xl[ml], order + 1),
+                             yl[ml] + xl[ml] * dte / 2, rcond=None)
+    return CSTAirfoil(au, al, dte)
+
+
+def max_thickness(x: np.ndarray, y: np.ndarray) -> float:
+    """Max thickness of a Selig-ordered airfoil (vertical distance)."""
+    i_le = int(np.argmin(x))
+    xu, yu = x[:i_le + 1][::-1], y[:i_le + 1][::-1]
+    xl, yl = x[i_le:], y[i_le:]
+    xs = cosine_spacing(201)
+    return float(np.max(np.interp(xs, xu, yu) - np.interp(xs, xl, yl)))
+
+
+def karman_trefftz(mu_x=-0.1, mu_y=0.1, te_angle_deg=10.0, n=161):
+    """Karman-Trefftz airfoil at unit chord, with its exact potential-flow lift.
+
+    The map tends to z = zeta far away, so the circulation is that of the
+    circle with the Kutta condition: cl = 8 pi R sin(alpha + beta) / chord.
     """
-    Generate random but feasible PARSEC parameters
-    
-    Args:
-        n_samples: Number of parameter sets to generate
-        
-    Returns:
-        Array of shape (n_samples, 11) with PARSEC parameters
-    """
-    params = np.zeros((n_samples, 11))
-    
-    # Parameter bounds (reasonable ranges for aerodynamic airfoils)
-    bounds = {
-        'rle': (0.005, 0.025),      # Leading edge radius
-        'x_up': (0.25, 0.45),        # Upper crest x
-        'y_up': (0.04, 0.08),        # Upper crest y
-        'y_xxup': (-0.5, -0.1),      # Upper curvature
-        'x_lo': (0.30, 0.50),        # Lower crest x
-        'y_lo': (-0.05, -0.02),      # Lower crest y (negative)
-        'y_xxlo': (0.1, 0.5),        # Lower curvature
-        'yte': (0.001, 0.005),       # Trailing edge thickness
-        'alpha_te': (-0.15, 0.15),   # TE direction
-        'beta_te': (0.05, 0.20),     # TE wedge angle
-        'dz_te': (-0.002, 0.002)     # TE offset
-    }
-    
-    for i, (pmin, pmax) in enumerate(bounds.values()):
-        params[:, i] = np.random.uniform(pmin, pmax, n_samples)
-    
-    return params
+    centre = complex(mu_x, mu_y)
+    radius = abs(1 - centre)
+    beta = np.arcsin(mu_y / radius)
+    k = 2 - np.radians(te_angle_deg) / np.pi
+    phi = np.linspace(-beta, -beta + 2 * np.pi, n)
+    zeta = centre + radius * np.exp(1j * phi)
+    ratio = (zeta[1:-1] - 1) / (zeta[1:-1] + 1)
+    w = np.abs(ratio) ** k * np.exp(1j * k * np.unwrap(np.angle(ratio)))
+    z = np.concatenate([[k], k * (1 + w) / (1 - w), [k]])
+    chord = z.real.max() - z.real.min()
+    z = (z - z.real.min()) / chord
 
-
-def load_airfoil_database() -> dict:
-    """
-    Load common airfoil shapes for reference
-    Returns dictionary with name: PARSEC_params
-    """
-    # Pre-computed PARSEC parameters for standard airfoils
-    database = {
-        'NACA0012': np.array([0.0126, 0.35, 0.06, -0.35, 0.35, -0.06, 0.35, 0.0012, 0.0, 0.10, 0.0]),
-        'NACA2412': np.array([0.0150, 0.30, 0.075, -0.40, 0.40, -0.04, 0.30, 0.0015, -0.05, 0.12, 0.0]),
-        'NACA4412': np.array([0.0160, 0.28, 0.095, -0.45, 0.42, -0.03, 0.25, 0.0018, -0.08, 0.14, 0.0]),
-    }
-    
-    return database
-
-
-if __name__ == "__main__":
-    # Example usage
-    print("Airfoil Parameterization Module")
-    print("=" * 50)
-    
-    # Generate random airfoil
-    params = generate_random_parsec_params(1)[0]
-    airfoil = PARSECAirfoil(params)
-    
-    # Create plot
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    
-    # Plot random airfoil
-    airfoil.plot(ax=axes[0, 0], linewidth=2, color='blue')
-    axes[0, 0].set_title('Random PARSEC Airfoil')
-    
-    # Load and plot standard airfoils
-    database = load_airfoil_database()
-    for idx, (name, params) in enumerate(database.items()):
-        row = (idx + 1) // 2
-        col = (idx + 1) % 2
-        airfoil_std = PARSECAirfoil(params)
-        airfoil_std.plot(ax=axes[row, col], linewidth=2, color='red')
-        axes[row, col].set_title(f'{name} Airfoil')
-    
-    plt.tight_layout()
-    plt.savefig('/home/claude/airfoil_optimization/data/example_airfoils.png', dpi=150)
-    print("\nExample airfoils saved to data/example_airfoils.png")
-    
-    # Save random airfoil to .dat file
-    airfoil.save_dat_file('/home/claude/airfoil_optimization/data/test_airfoil.dat')
-    print("Test airfoil saved to data/test_airfoil.dat")
+    def exact_cl(alpha_deg):
+        return 8 * np.pi * radius / chord * np.sin(np.radians(alpha_deg) + beta)
+    return z.real, z.imag, exact_cl
